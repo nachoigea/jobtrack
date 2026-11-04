@@ -22,11 +22,17 @@ DB_PATH = BASE_DIR / "jobtrack.db"  # los datos se guardan junto a los scripts
 # --- Servidor ---
 HOST = "127.0.0.1"
 PORT = 8765
-RUTA_API = re.compile(r"^/api/ofertas(?:/(\d+))?$")
+RUTA_PROYECTOS = re.compile(r"^/api/proyectos(?:/(\d+))?$")          # /api/proyectos[/<id>]
+RUTA_OFERTAS_PROYECTO = re.compile(r"^/api/proyectos/(\d+)/ofertas$")  # ofertas de un proyecto
+RUTA_OFERTA = re.compile(r"^/api/ofertas/(\d+)$")                     # una oferta concreta
+RUTA_MOVER_OFERTA = re.compile(r"^/api/ofertas/(\d+)/mover$")         # mover/copiar a otro proyecto
 
 # --- Modelo de datos ---
 ESTADOS = ["visto", "solicitado", "respuesta", "entrevista", "oferta", "rechazada"]
 REMOTO = ["Presencial", "Híbrido", "Remoto"]
 CAMPOS = ["puesto", "empresa", "localizacion", "remoto", "salario",
           "fecha_aplicacion", "estado", "via", "observaciones"]
+CAMPOS_PROYECTO = ["nombre", "fecha_inicio"]
 FORMATO_FECHA = re.compile(r"\d{4}-\d{2}-\d{2}")
+# Proyecto al que se asignan las ofertas de bases de datos anteriores a los proyectos
+NOMBRE_PROYECTO_MIGRADO = "Búsqueda inicial"

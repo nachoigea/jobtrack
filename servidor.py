@@ -2,12 +2,28 @@
 servidor.py - Servidor HTTP de JobTrack.
 
 Sirve la página (definida en interfaz.py) y expone la API REST que usa el
-navegador (/api/ofertas), apoyándose en database.py para los datos.
+navegador, apoyándose en database.py para los datos:
+
+    GET    /api/proyectos              lista de proyectos (con nº de ofertas)
+    POST   /api/proyectos              crea un proyecto
+    GET    /api/proyectos/<id>         datos de un proyecto
+    PUT    /api/proyectos/<id>         modifica un proyecto
+    DELETE /api/proyectos/<id>         borra un proyecto y sus ofertas
+    GET    /api/proyectos/<id>/ofertas ofertas del proyecto
+    POST   /api/proyectos/<id>/ofertas crea una oferta en el proyecto
+    POST   /api/ofertas/<id>/mover     mueve o copia la oferta a otro proyecto
+                                       ({"proyecto_id": n, "copiar": bool})
+    PUT    /api/ofertas/<id>           modifica una oferta
+    DELETE /api/ofertas/<id>           borra una oferta
 """
 import database
-from config import (HOST, RUTA_API, BaseHTTPRequestHandler,
-                    ThreadingHTTPServer, json)
+from config import (HOST, RUTA_MOVER_OFERTA, RUTA_OFERTA, RUTA_OFERTAS_PROYECTO,
+                    RUTA_PROYECTOS, BaseHTTPRequestHandler, ThreadingHTTPServer,
+                    json)
 from interfaz import pagina_html
+
+NO_ENCONTRADO = {"error": "No encontrado"}
+PROYECTO_NO_EXISTE = {"error": "El proyecto no existe"}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -34,34 +50,51 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        elif RUTA_API.match(self.path):
-            self._json(200, database.listar())
+        elif m := RUTA_PROYECTOS.match(self.path):
+            if not m.group(1):
+                return self._json(200, database.listar_proyectos())
+            p = database.obtener_proyecto(int(m.group(1)))
+            self._json(200, p) if p else self._json(404, PROYECTO_NO_EXISTE)
+        elif m := RUTA_OFERTAS_PROYECTO.match(self.path):
+            ofertas = database.listar(int(m.group(1)))
+            self._json(200, ofertas) if ofertas is not None else self._json(404, PROYECTO_NO_EXISTE)
         else:
-            self._json(404, {"error": "No encontrado"})
+            self._json(404, NO_ENCONTRADO)
 
     def do_POST(self):
-        if not RUTA_API.match(self.path):
-            return self._json(404, {"error": "No encontrado"})
         try:
-            self._json(201, database.crear(self._leer_json()))
+            if (m := RUTA_PROYECTOS.match(self.path)) and not m.group(1):
+                return self._json(201, database.crear_proyecto(self._leer_json()))
+            if m := RUTA_OFERTAS_PROYECTO.match(self.path):
+                oferta = database.crear(int(m.group(1)), self._leer_json())
+                return self._json(201, oferta) if oferta else self._json(404, PROYECTO_NO_EXISTE)
+            if m := RUTA_MOVER_OFERTA.match(self.path):
+                return self._json(200, database.mover(int(m.group(1)), self._leer_json()))
+            self._json(404, NO_ENCONTRADO)
+        except LookupError as e:
+            self._json(404, {"error": str(e)})
         except ValueError as e:
             self._json(400, {"error": str(e)})
 
     def do_PUT(self):
-        m = RUTA_API.match(self.path)
-        if not m or not m.group(1):
-            return self._json(404, {"error": "No encontrado"})
         try:
-            res = database.actualizar(int(m.group(1)), self._leer_json())
-            self._json(200 if res else 404, res or {"error": "No existe"})
+            if (m := RUTA_PROYECTOS.match(self.path)) and m.group(1):
+                res = database.actualizar_proyecto(int(m.group(1)), self._leer_json())
+                return self._json(200, res) if res else self._json(404, PROYECTO_NO_EXISTE)
+            if m := RUTA_OFERTA.match(self.path):
+                res = database.actualizar(int(m.group(1)), self._leer_json())
+                return self._json(200 if res else 404, res or {"error": "No existe"})
+            self._json(404, NO_ENCONTRADO)
         except ValueError as e:
             self._json(400, {"error": str(e)})
 
     def do_DELETE(self):
-        m = RUTA_API.match(self.path)
-        if not m or not m.group(1):
-            return self._json(404, {"error": "No encontrado"})
-        database.borrar(int(m.group(1)))
+        if (m := RUTA_PROYECTOS.match(self.path)) and m.group(1):
+            database.borrar_proyecto(int(m.group(1)))
+        elif m := RUTA_OFERTA.match(self.path):
+            database.borrar(int(m.group(1)))
+        else:
+            return self._json(404, NO_ENCONTRADO)
         self._json(200, {"ok": True})
 
 
